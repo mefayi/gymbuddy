@@ -8,14 +8,13 @@ const trainingSessionSchema = new mongoose.Schema({
   },
   date: { type: Date, required: true },
   duration: { type: Number, required: true }, // in Sekunden
-  calories_burned: { type: Number },
-  distance: { type: Number }, // in km
-  avg_speed: { type: Number }, // in km/h
-  elevation: { type: Number }, // in Metern
-  calories_per_hour: { type: Number },
+  calories_burned: { type: Number, default: 0 },
+  distance: { type: Number, default: 0 },
+  avg_speed: { type: Number, default: 0 },
+  elevation: { type: Number, default: 0 },
   heart_rate: {
-    max: { type: Number },
-    avg: { type: Number },
+    max: { type: Number, default: 0 },
+    avg: { type: Number, default: 0 },
   },
   device: {
     type: String,

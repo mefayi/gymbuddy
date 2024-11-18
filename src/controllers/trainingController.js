@@ -1,15 +1,15 @@
-const TrainingSession = require("../models/TrainingSession");
-const Tesseract = require("tesseract.js");
+const path = require("path");
 const sharp = require("sharp");
 const fs = require("fs/promises");
+const Tesseract = require("tesseract.js");
 
 // Bild hochladen und verarbeiten
 exports.uploadTrainingImage = async (req, res) => {
   try {
-    const { path } = req.file;
+    const { path: tempPath, originalname } = req.file;
 
     // Preprocessing: Bild optimieren (Kontrast, Zuschneiden)
-    const processedImage = await sharp(path)
+    const processedImage = await sharp(tempPath)
       .grayscale() // Schwarz-Weiß machen
       .normalize() // Helligkeit und Kontrast anpassen
       .toBuffer();
@@ -19,17 +19,34 @@ exports.uploadTrainingImage = async (req, res) => {
       logger: (m) => console.log(m),
     });
 
-    // Temporäre Datei löschen
-    await fs.unlink(path);
-
     // Extrahierte Daten (z. B. Dauer, Kalorien) verarbeiten
     const extractedText = result.data.text;
     const parsedData = parseTrainingData(extractedText);
 
-    res
-      .status(200)
-      .json({ message: "Image processed successfully", parsedData });
+    // Generiere einen eindeutigen Dateinamen
+    const timestamp = Date.now();
+    const savedPath = path.join(
+      __dirname,
+      "../uploads/saved",
+      `${timestamp}-${originalname}`
+    );
+
+    // Temporäre Datei ins permanente Verzeichnis verschieben
+    await fs.rename(tempPath, savedPath);
+
+    // Erfolgreiche Antwort
+    res.status(200).json({
+      message: "Image processed successfully",
+      savedImagePath: savedPath,
+      parsedData,
+    });
   } catch (error) {
+    // Fehlerhandling: Temporäre Datei löschen
+    if (req.file && req.file.path) {
+      await fs.unlink(req.file.path).catch(() => {
+        console.error("Failed to delete temporary file");
+      });
+    }
     res.status(500).json({ error: error.message });
   }
 };
