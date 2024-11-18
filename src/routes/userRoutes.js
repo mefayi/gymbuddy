@@ -1,17 +1,32 @@
 const express = require("express");
 const router = express.Router();
-const { registerUser, loginUser } = require("../controllers/userController");
+const {
+  registerUser,
+  loginUser,
+  updateUserProfile,
+  changePassword,
+  forgotPassword,
+  resetPassword,
+  getAllUsers,
+  deleteUser,
+  updateUserByAdmin,
+  updateHeight,
+} = require("../controllers/userController");
 
-// User-Routen
+// Routen für Nutzeraktionen
 router.post("/register", registerUser);
 router.post("/login", loginUser);
-router.put("/update-height", updateHeight);
 router.put("/update-profile", updateUserProfile);
+router.put("/change-password", changePassword);
 router.post("/forgot-password", forgotPassword);
 router.post("/reset-password", resetPassword);
-router.put("/change-password", changePassword);
-router.get("/admin/users", isAdmin, getAllUsers);
-router.delete("/admin/users/:id", isAdmin, deleteUser);
-router.put("/admin/users/:id", isAdmin, updateUserByAdmin);
+
+// Admin-Routen
+router.get("/admin/users", getAllUsers);
+router.delete("/admin/users/:id", deleteUser);
+router.put("/admin/users/:id", updateUserByAdmin);
+
+// Größe aktualisieren
+router.put("/update-height", updateHeight);
 
 module.exports = router;
