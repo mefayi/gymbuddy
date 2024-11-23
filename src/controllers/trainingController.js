@@ -1,61 +1,119 @@
+require("dotenv").config();
 const path = require("path");
-const sharp = require("sharp");
 const fs = require("fs/promises");
-const Tesseract = require("tesseract.js");
+const sharp = require("sharp");
+const vision = require("@google-cloud/vision");
+const { GoogleAuth, grpc } = require("google-gax");
 
-// Bild hochladen und verarbeiten
+// API-Schlüssel direkt verwenden
+function getApiKeyCredentials(apiKey) {
+  const sslCreds = grpc.credentials.createSsl();
+  const googleAuth = new GoogleAuth();
+  const authClient = googleAuth.fromAPIKey(apiKey);
+  const credentials = grpc.credentials.combineChannelCredentials(
+    sslCreds,
+    grpc.credentials.createFromGoogleCredential(authClient)
+  );
+  return credentials;
+}
+
 exports.uploadTrainingImage = async (req, res) => {
   try {
     const { path: tempPath, originalname } = req.file;
 
-    // Preprocessing: Bild optimieren (Kontrast, Zuschneiden)
+    // 1. Validierung des Dateiformats
+    const metadata = await sharp(tempPath).metadata();
+    if (!["jpeg", "png", "gif"].includes(metadata.format)) {
+      throw new Error(
+        `Invalid file format: ${metadata.format}. Only JPEG, PNG, and GIF are supported.`
+      );
+    }
+
+    // 2. Konvertiere GIF oder PNG zu JPEG (falls nötig)
+    if (metadata.format !== "jpeg") {
+      const convertedImage = await sharp(tempPath).toFormat("jpeg").toBuffer();
+      await fs.writeFile(tempPath, convertedImage);
+    }
+
+    // 3. Bildvorverarbeitung
     const processedImage = await sharp(tempPath)
-      .grayscale() // Schwarz-Weiß machen
-      .normalize() // Helligkeit und Kontrast anpassen
+      .resize({ width: 800 }) // Verkleinern für bessere OCR
+      .grayscale() // Schwarz-Weiß-Konvertierung
+      .normalize() // Kontrast und Helligkeit anpassen
       .toBuffer();
 
-    // OCR: Text extrahieren
-    const result = await Tesseract.recognize(processedImage, "eng", {
-      logger: (m) => console.log(m),
+    // Speichern des verarbeiteten Bildes
+    const processedImagePath = path.join(
+      __dirname,
+      "../uploads/temp",
+      `${Date.now()}-${originalname}.jpeg`
+    );
+    await fs.writeFile(processedImagePath, processedImage);
+
+    // 4. Google Vision API-Aufruf mit API-Schlüssel
+    const sslCreds = getApiKeyCredentials(process.env.GOOGLE_API_KEY);
+    const client = new vision.ImageAnnotatorClient({ sslCreds });
+
+    const processedImageBuffer = await fs.readFile(processedImagePath);
+    const base64Image = processedImageBuffer.toString("base64");
+
+    const [result] = await client.textDetection({
+      image: { content: base64Image },
     });
 
-    // Extrahierte Daten (z. B. Dauer, Kalorien) verarbeiten
-    const extractedText = result.data.text;
+    const extractedText = result.textAnnotations[0]?.description || "";
+    console.log("Extracted text:", extractedText);
+
+    // Extrahierte Daten
     const parsedData = parseTrainingData(extractedText);
 
-    // Generiere einen eindeutigen Dateinamen
-    const timestamp = Date.now();
-    const savedPath = path.join(
-      __dirname,
-      "../uploads/saved",
-      `${timestamp}-${originalname}`
-    );
+    // 5. Training in der Datenbank speichern (falls OCR-Daten vorhanden)
+    const { duration, calories, distance } = parsedData;
+    if (!duration && !calories && !distance) {
+      throw new Error("No valid training data extracted from the image.");
+    }
 
-    // Temporäre Datei ins permanente Verzeichnis verschieben
-    await fs.rename(tempPath, savedPath);
+    const userId = req.body.user_id || "placeholderUserId"; // Platzhalter für Nutzer-ID
 
-    // Erfolgreiche Antwort
-    res.status(200).json({
-      message: "Image processed successfully",
-      savedImagePath: savedPath,
+    const trainingSession = new TrainingSession({
+      user_id: userId,
+      date: new Date(),
+      duration,
+      calories_burned: calories,
+      distance,
+    });
+
+    await trainingSession.save();
+
+    // 6. Erfolgreiche Antwort senden
+    res.status(201).json({
+      message: "Image processed and training saved successfully",
       parsedData,
     });
   } catch (error) {
+    console.error("Error during image processing:", error.message);
+
     // Fehlerhandling: Temporäre Datei löschen
     if (req.file && req.file.path) {
-      await fs.unlink(req.file.path).catch(() => {
-        console.error("Failed to delete temporary file");
-      });
+      try {
+        await fs.access(req.file.path); // Prüfen, ob die Datei existiert
+        await fs.unlink(req.file.path); // Datei löschen
+      } catch (err) {
+        console.error(
+          "Temporary file does not exist or could not be deleted:",
+          err.message
+        );
+      }
     }
     res.status(500).json({ error: error.message });
   }
 };
 
-// Funktion zum Extrahieren der Trainingsdaten aus dem Text
+// Funktion zum Extrahieren der Trainingsdaten
 function parseTrainingData(text) {
-  const durationMatch = text.match(/Dauer.*?(\d+:\d+)/); // Beispiel: "Dauer der Übung: 38:19"
-  const caloriesMatch = text.match(/Kalorien.*?(\d+)/); // Beispiel: "500 kcal"
-  const distanceMatch = text.match(/Entfernung.*?([\d.]+)/); // Beispiel: "4.23 km"
+  const durationMatch = text.match(/(?:Dauer|Zeit).*?(\d+:\d+)/i); // Dauer der Übung
+  const caloriesMatch = text.match(/(?:kcal|Kalorien).*?(\d+)/i); // Verbrannte Kalorien
+  const distanceMatch = text.match(/(?:km|Entfernung).*?([\d.]+)/i); // Zurückgelegte Entfernung
 
   return {
     duration: durationMatch ? durationMatch[1] : null,

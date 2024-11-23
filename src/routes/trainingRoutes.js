@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const multer = require("multer");
+const path = require("path");
 const { uploadTrainingImage } = require("../controllers/trainingController");
 const {
   addTrainingSession,
@@ -11,7 +12,9 @@ const {
   getMonthlySummary,
 } = require("../controllers/trainingController");
 
-const upload = multer({ dest: "uploads/" });
+const upload = multer({
+  dest: path.join(__dirname, "../uploads/temp"),
+});
 
 router.post("/upload-image", upload.single("image"), uploadTrainingImage);
 router.post("/", addTrainingSession);

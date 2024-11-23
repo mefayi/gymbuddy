@@ -1,5 +1,3 @@
-const mongoose = require("mongoose");
-
 const trainingSessionSchema = new mongoose.Schema({
   user_id: {
     type: mongoose.Schema.Types.ObjectId,
@@ -12,6 +10,7 @@ const trainingSessionSchema = new mongoose.Schema({
   distance: { type: Number, default: 0 },
   avg_speed: { type: Number, default: 0 },
   elevation: { type: Number, default: 0 },
+  power: { type: Number, default: 0 },
   heart_rate: {
     max: { type: Number, default: 0 },
     avg: { type: Number, default: 0 },
