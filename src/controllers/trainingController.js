@@ -4,6 +4,7 @@ const fs = require("fs/promises");
 const sharp = require("sharp");
 const vision = require("@google-cloud/vision");
 const { GoogleAuth, grpc } = require("google-gax");
+const TrainingSession = require("../models/TrainingSession");
 
 // API-Schlüssel direkt verwenden
 function getApiKeyCredentials(apiKey) {
@@ -62,25 +63,40 @@ exports.uploadTrainingImage = async (req, res) => {
     });
 
     const extractedText = result.textAnnotations[0]?.description || "";
-    console.log("Extracted text:", extractedText);
 
     // Extrahierte Daten
     const parsedData = parseTrainingData(extractedText);
 
     // 5. Training in der Datenbank speichern (falls OCR-Daten vorhanden)
-    const { duration, calories, distance } = parsedData;
+    const {
+      duration,
+      calories,
+      distance,
+      floors,
+      maxHeartRate,
+      avgHeartRate,
+      power,
+    } = parsedData;
     if (!duration && !calories && !distance) {
       throw new Error("No valid training data extracted from the image.");
     }
 
-    const userId = req.body.user_id || "placeholderUserId"; // Platzhalter für Nutzer-ID
+    const userId = req.body.user_id || "648d75f5a95b5d2e9c3e8a1f"; // Platzhalter für Nutzer-ID
 
     const trainingSession = new TrainingSession({
       user_id: userId,
       date: new Date(),
-      duration,
-      calories_burned: calories,
-      distance,
+      duration: convertDurationToSeconds(duration), // Dauer in Sekunden
+      calories_burned: calories || 0, // Kalorien
+      distance: distance || 0, // Entfernung
+      avg_speed: calculateAverageSpeed(distance, duration), // Durchschnittsgeschwindigkeit
+      elevation: floors || 0, // Stockwerke
+      heart_rate: {
+        max: maxHeartRate || 0, // Maximale Herzfrequenz
+        avg: avgHeartRate || 0, // Mittlere Herzfrequenz
+      },
+      power: power || 0, // Durchschnittsleistung
+      device: determineDevice(parsedData), // Gerät bestimmen
     });
 
     await trainingSession.save();
@@ -111,15 +127,46 @@ exports.uploadTrainingImage = async (req, res) => {
 
 // Funktion zum Extrahieren der Trainingsdaten
 function parseTrainingData(text) {
-  const durationMatch = text.match(/(?:Dauer|Zeit).*?(\d+:\d+)/i); // Dauer der Übung
-  const caloriesMatch = text.match(/(?:kcal|Kalorien).*?(\d+)/i); // Verbrannte Kalorien
-  const distanceMatch = text.match(/(?:km|Entfernung).*?([\d.]+)/i); // Zurückgelegte Entfernung
+  const durationMatch = text.match(/(\d+:\d+)\s*Min:Sek/i); // Dauer der Übung
+  const caloriesMatch = text.match(/(\d+)\s*kcal/i); // Verbrauchte Kalorien
+  const distanceMatch = text.match(/([\d.]+)\s*km/i);
+  const floorsMatch = text.match(/(\d+)\s*Stockwerke/i); // Stockwerke
+  const maxHeartRateMatch = text.match(
+    /Maximale Herzfrequenz\s*(\d+)\s*Schläge\/min/i
+  ); // Maximale Herzfrequenz
+  const avgHeartRateMatch = text.match(
+    /Mittlere Herzfrequenz\s*(\d+)\s*Schläge\/min/i
+  ); // Mittlere Herzfrequenz
+  const powerMatch = text.match(/(\d+)\s*Watt/i); // Durchschnittsleistung
 
   return {
-    duration: durationMatch ? durationMatch[1] : null,
-    calories: caloriesMatch ? parseInt(caloriesMatch[1], 10) : null,
-    distance: distanceMatch ? parseFloat(distanceMatch[1]) : null,
+    duration: durationMatch ? durationMatch[1] : null, // z. B. "26:41"
+    calories: caloriesMatch ? parseInt(caloriesMatch[1], 10) : null, // z. B. 300
+    distance: distanceMatch ? parseFloat(distanceMatch[1]) : null, // z. B. 4.23 (falls vorhanden)
+    floors: floorsMatch ? parseInt(floorsMatch[1], 10) : null, // z. B. 88
+    maxHeartRate: maxHeartRateMatch ? parseInt(maxHeartRateMatch[1], 10) : null, // z. B. 152
+    avgHeartRate: avgHeartRateMatch ? parseInt(avgHeartRateMatch[1], 10) : null, // z. B. 141
+    power: powerMatch ? parseInt(powerMatch[1], 10) : null, // z. B. 117
   };
+}
+
+// Hilfsfunktionen
+function convertDurationToSeconds(duration) {
+  if (!duration) return 0;
+  const [minutes, seconds] = duration.split(":").map(Number);
+  return minutes * 60 + seconds;
+}
+
+function calculateAverageSpeed(distance, duration) {
+  if (!distance || !duration) return 0;
+  const hours = convertDurationToSeconds(duration) / 3600; // Dauer in Stunden
+  return (distance / hours).toFixed(2); // Geschwindigkeit in km/h
+}
+
+function determineDevice(parsedData) {
+  if (parsedData.floors) return "stepper";
+  if (parsedData.power && !parsedData.floors) return "bike";
+  return "treadmill";
 }
 
 // 1. Training hinzufügen

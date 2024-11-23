@@ -1,3 +1,5 @@
+const mongoose = require("mongoose");
+
 const trainingSessionSchema = new mongoose.Schema({
   user_id: {
     type: mongoose.Schema.Types.ObjectId,
