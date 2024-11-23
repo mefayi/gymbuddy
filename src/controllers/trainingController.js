@@ -1,5 +1,6 @@
 require("dotenv").config();
 const path = require("path");
+const exifParser = require("exif-parser");
 const fs = require("fs/promises");
 const sharp = require("sharp");
 const vision = require("@google-cloud/vision");
@@ -36,7 +37,26 @@ exports.uploadTrainingImage = async (req, res) => {
       await fs.writeFile(tempPath, convertedImage);
     }
 
-    // 3. Bildvorverarbeitung
+    // 3. Metadaten mit EXIF-Datum extrahieren
+    let exifData;
+    try {
+      const fileBuffer = await fs.readFile(tempPath);
+      const parser = exifParser.create(fileBuffer);
+      exifData = parser.parse();
+      console.log("EXIF Data:", exifData);
+    } catch (error) {
+      console.error("Error parsing EXIF data:", error.message);
+      exifData = {}; // Fallback
+    }
+
+    // Versuche, das Erstellungsdatum aus den EXIF-Daten zu extrahieren
+    const imageDate = extractDateFromExif(exifData);
+    console.log("Extracted image date:", imageDate);
+
+    // Fallback auf das aktuelle Datum, falls kein Datum gefunden wird
+    const trainingDate = imageDate || new Date();
+
+    // 4. Bildvorverarbeitung
     const processedImage = await sharp(tempPath)
       .resize({ width: 800 }) // Verkleinern für bessere OCR
       .grayscale() // Schwarz-Weiß-Konvertierung
@@ -51,7 +71,7 @@ exports.uploadTrainingImage = async (req, res) => {
     );
     await fs.writeFile(processedImagePath, processedImage);
 
-    // 4. Google Vision API-Aufruf mit API-Schlüssel
+    // 5. Google Vision API-Aufruf mit API-Schlüssel
     const sslCreds = getApiKeyCredentials(process.env.GOOGLE_API_KEY);
     const client = new vision.ImageAnnotatorClient({ sslCreds });
 
@@ -67,7 +87,7 @@ exports.uploadTrainingImage = async (req, res) => {
     // Extrahierte Daten
     const parsedData = parseTrainingData(extractedText);
 
-    // 5. Training in der Datenbank speichern (falls OCR-Daten vorhanden)
+    // 6. Training in der Datenbank speichern (falls OCR-Daten vorhanden)
     const {
       duration,
       calories,
@@ -85,7 +105,7 @@ exports.uploadTrainingImage = async (req, res) => {
 
     const trainingSession = new TrainingSession({
       user_id: userId,
-      date: new Date(),
+      date: trainingDate,
       duration: convertDurationToSeconds(duration), // Dauer in Sekunden
       calories_burned: calories || 0, // Kalorien
       distance: distance || 0, // Entfernung
@@ -101,10 +121,10 @@ exports.uploadTrainingImage = async (req, res) => {
 
     await trainingSession.save();
 
-    // 6. Erfolgreiche Antwort senden
+    // 7. Erfolgreiche Antwort senden
     res.status(201).json({
       message: "Image processed and training saved successfully",
-      parsedData,
+      trainingSession, // Die gespeicherte Trainingssession zurückgeben
     });
   } catch (error) {
     console.error("Error during image processing:", error.message);
@@ -158,15 +178,27 @@ function convertDurationToSeconds(duration) {
 }
 
 function calculateAverageSpeed(distance, duration) {
-  if (!distance || !duration) return 0;
+  if (!distance || !duration || duration === 0) return 0;
   const hours = convertDurationToSeconds(duration) / 3600; // Dauer in Stunden
-  return (distance / hours).toFixed(2); // Geschwindigkeit in km/h
+  return parseFloat((distance / hours).toFixed(2)); // Geschwindigkeit in km/h
 }
 
 function determineDevice(parsedData) {
   if (parsedData.floors) return "stepper";
   if (parsedData.power && !parsedData.floors) return "bike";
   return "treadmill";
+}
+
+function extractDateFromExif(exifData) {
+  try {
+    if (exifData && exifData.tags && exifData.tags.DateTimeOriginal) {
+      return new Date(exifData.tags.DateTimeOriginal * 1000); // Unix-Timestamp zu JS-Date konvertieren
+    }
+    return null;
+  } catch (error) {
+    console.error("Error extracting date from EXIF metadata:", error);
+    return null;
+  }
 }
 
 // 1. Training hinzufügen
