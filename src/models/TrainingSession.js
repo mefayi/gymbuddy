@@ -7,7 +7,7 @@ const trainingSessionSchema = new mongoose.Schema({
     required: true,
   },
   date: { type: Date, required: true },
-  duration: { type: Number, required: true }, // in Sekunden
+  duration: { type: Number, required: true },
   calories_burned: { type: Number, default: 0 },
   distance: { type: Number, default: 0 },
   avg_speed: { type: Number, default: 0 },

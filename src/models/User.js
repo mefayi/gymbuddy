@@ -6,11 +6,12 @@ const userSchema = new mongoose.Schema({
   password: { type: String, required: true },
   date_of_birth: { type: Date, required: true },
   gender: { type: String, enum: ["male", "female", "other"], required: true },
-  weight: { type: Number, required: true }, // Gewicht in kg
-  height: { type: Number }, // Größe in cm
+  weight: { type: Number, required: true },
+  height: { type: Number },
   created_at: { type: Date, default: Date.now },
   resetPasswordToken: { type: String },
   resetPasswordExpire: { type: Date },
+  isAdmin: { type: Boolean, default: false },
 });
 
 // Passwort-Hashing vor dem Speichern

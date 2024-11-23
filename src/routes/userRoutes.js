@@ -17,16 +17,14 @@ const {
 router.post("/register", registerUser);
 router.post("/login", loginUser);
 router.put("/update-profile", updateUserProfile);
+router.put("/update-height", updateHeight);
 router.put("/change-password", changePassword);
 router.post("/forgot-password", forgotPassword);
 router.post("/reset-password", resetPassword);
 
 // Admin-Routen
 router.get("/admin/users", getAllUsers);
-router.delete("/admin/users/:id", deleteUser);
 router.put("/admin/users/:id", updateUserByAdmin);
-
-// Größe aktualisieren
-router.put("/update-height", updateHeight);
+router.delete("/admin/users/:id", deleteUser);
 
 module.exports = router;

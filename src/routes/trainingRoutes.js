@@ -14,11 +14,11 @@ const {
 const upload = multer({ dest: "uploads/" });
 
 router.post("/upload-image", upload.single("image"), uploadTrainingImage);
-router.post("/", addTrainingSession); // Training hinzufügen
-router.get("/", getAllTrainings); // Alle Trainings des Nutzers abrufen
-router.get("/:id", getTrainingById); // Einzelnes Training abrufen
-router.put("/:id", updateTrainingSession); // Training aktualisieren
-router.delete("/:id", deleteTrainingSession); // Training löschen
-router.get("/summary/:month/:year", getMonthlySummary); // Monatliche Zusammenfassung
+router.post("/", addTrainingSession);
+router.get("/", getAllTrainings);
+router.get("/:id", getTrainingById);
+router.get("/summary/:month/:year", getMonthlySummary);
+router.put("/:id", updateTrainingSession);
+router.delete("/:id", deleteTrainingSession);
 
 module.exports = router;

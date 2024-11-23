@@ -5,10 +5,17 @@ const config = require("../config");
 
 // Registrierung
 exports.registerUser = async (req, res) => {
-  const { email, password, date_of_birth, gender, weight } = req.body;
+  const { email, password, date_of_birth, gender, weight, height } = req.body;
 
   try {
-    const user = new User({ email, password, date_of_birth, gender, weight });
+    const user = new User({
+      email,
+      password,
+      date_of_birth,
+      gender,
+      weight,
+      height,
+    });
     await user.save();
     res.status(201).json({ message: "User registered successfully" });
   } catch (error) {
@@ -93,13 +100,11 @@ exports.forgotPassword = async (req, res) => {
     const user = await User.findOne({ email });
     if (!user) throw new Error("User not found");
 
-    // Generiere Reset-Token
     const resetToken = crypto.randomBytes(32).toString("hex");
     user.resetPasswordToken = resetToken;
-    user.resetPasswordExpire = Date.now() + 3600000; // 1 Stunde gültig
+    user.resetPasswordExpire = Date.now() + 3600000;
     await user.save();
 
-    // Hier könntest du eine E-Mail mit dem Reset-Link verschicken (z. B. /reset-password?token=...)
     res.status(200).json({ message: "Password reset link sent", resetToken });
   } catch (error) {
     res.status(400).json({ error: error.message });
