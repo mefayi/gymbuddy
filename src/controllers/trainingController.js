@@ -43,7 +43,6 @@ exports.uploadTrainingImage = async (req, res) => {
       const fileBuffer = await fs.readFile(tempPath);
       const parser = exifParser.create(fileBuffer);
       exifData = parser.parse();
-      console.log("EXIF Data:", exifData);
     } catch (error) {
       console.error("Error parsing EXIF data:", error.message);
       exifData = {}; // Fallback
@@ -51,7 +50,6 @@ exports.uploadTrainingImage = async (req, res) => {
 
     // Versuche, das Erstellungsdatum aus den EXIF-Daten zu extrahieren
     const imageDate = extractDateFromExif(exifData);
-    console.log("Extracted image date:", imageDate);
 
     // Fallback auf das aktuelle Datum, falls kein Datum gefunden wird
     const trainingDate = imageDate || new Date();
